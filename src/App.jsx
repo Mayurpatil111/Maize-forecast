@@ -519,7 +519,7 @@ function App() {
           title="How many daily price points the API returned in this forecast."
         >
           <h3 className="mb-0.5 text-[9px] font-semibold leading-snug text-[#8b949e] sm:text-[10px]">
-            Days in forecast
+            Next 15 days forecast
           </h3>
           <p className="text-base font-semibold tabular-nums tracking-tight text-[#e6edf3] sm:text-lg">{stats.points}</p>
         </article>
