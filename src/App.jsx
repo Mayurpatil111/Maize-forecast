@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 
-const API_BASE_URL = 'https://ardell-reusable-steven.ngrok-free.dev'
+const API_BASE_URL = 'https://web-production-235ac.up.railway.app'
 
 const MARKETS = ['DAVANAGERE', 'RANEBENNURU', 'HUBBALLI']
 const GRADES = ['AVERAGE', 'SMALL', 'LARGE', 'MEDIUM']
