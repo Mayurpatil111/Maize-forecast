@@ -1,15 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 
-const API_BASE_URL = 'https://web-production-773e9.up.railway.app'
+const API_BASE_URL = 'https://ardell-reusable-steven.ngrok-free.dev'
 
 const MARKETS = ['DAVANAGERE', 'RANEBENNURU', 'HUBBALLI']
 const GRADES = ['AVERAGE', 'SMALL', 'LARGE', 'MEDIUM']
 
-/** Calendar uses YYYY-MM-DD; API query expects DD-MM-YYYY */
+/** Calendar uses YYYY-MM-DD; we pass the same format to the API */
 function isoDateToApi(iso) {
-  const [y, m, d] = iso.split('-')
-  if (!y || !m || !d) return iso
-  return `${d}-${m}-${y}`
+  return iso
 }
 
 function dateToIsoLocal(d) {
@@ -420,6 +418,7 @@ function App() {
       }
 
       const result = await response.json()
+      console.log(result)
       setData(result)
     } catch (fetchError) {
       setError(
