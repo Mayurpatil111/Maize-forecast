@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 const API_BASE_URL = 'https://web-production-235ac.up.railway.app'
 
-const MARKETS = ['DAVANAGERE', 'RANEBENNURU', 'HUBBALLI']
+const MARKETS = ['DAVANAGERE', 'RANIBENNUR', 'HUBBALLI']
 const GRADES = ['AVERAGE', 'SMALL', 'LARGE', 'MEDIUM']
 
 /** Calendar uses YYYY-MM-DD; we pass the same format to the API */
@@ -49,6 +49,14 @@ const formatDateLabel = (dateString) => {
 
 const formatPrice = (value) => `Rs. ${value.toFixed(2)}`
 
+/** API calendar fields: hide placeholder strings */
+function formatCalendarLabel(value) {
+  if (value == null || value === '') return '—'
+  const s = String(value).trim()
+  if (s === 'None' || s === 'Unknown') return '—'
+  return s
+}
+
 /** One cubic segment from Catmull–Rom control points P0–P3, curve from P1 to P2 */
 function catmullRomSegment(p0, p1, p2, p3) {
   const cp1x = p1.x + (p2.x - p0.x) / 6
@@ -73,11 +81,140 @@ function smoothPath(pts) {
   return d
 }
 
-function PriceChart({ predictions, crop, latestModal }) {
+function ChartPanelHeader({ crop, pointsCount, latestModal, headerActions }) {
+  const title = (crop || 'MAIZE').toUpperCase()
+  return (
+    <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[#2d333b]/85 px-4 py-2.5 max-[900px]:flex-col max-[900px]:items-start sm:px-5 sm:py-3">
+      <div className="text-left">
+        <h2 className="mb-0.5 text-lg font-bold tracking-tight text-green-400 sm:text-[22px]">{title}</h2>
+        <p className="text-xs text-[#8b949e] sm:text-[13px]">{pointsCount} points · daily</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-start justify-end gap-2 sm:gap-3 max-[900px]:w-full max-[900px]:justify-between">
+        {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
+        {typeof latestModal === 'number' && (
+          <div className="shrink-0 text-right max-[900px]:text-left">
+            <span className="block text-lg font-semibold tabular-nums tracking-tight text-[#c9d1d9] sm:text-[22px]">
+              {latestModal.toFixed(2)}
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-[#8b949e] sm:text-[11px]">
+              modal · last forecast day
+            </span>
+          </div>
+        )}
+      </div>
+    </header>
+  )
+}
+
+function ForecastDaysTable({ predictions }) {
+  if (!Array.isArray(predictions) || predictions.length === 0) return null
+  const thBase =
+    'whitespace-nowrap px-2 py-2.5 text-[9px] font-bold uppercase tracking-[0.1em] sm:px-3 sm:py-3 sm:text-[10px]'
+  const tdBase = 'px-2 py-2 align-middle sm:px-3 sm:py-2.5'
+  return (
+    <div className="rounded-xl border border-[#2d333b]/85 bg-gradient-to-b from-[#1b1f26]/95 via-[#151921]/90 to-[#10141a]/95 shadow-[0_10px_28px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/25">
+      <table className="w-full min-w-[720px] border-collapse text-left text-[10px] sm:min-w-[820px] sm:text-[11px]">
+        <thead>
+          <tr className="sticky top-0 z-[2] border-b border-[#2d333b] bg-[#1c2128] shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+            <th className={`${thBase} border-b border-[#3d444d]/60 text-left text-[#b1bac4]`}>
+              Date
+            </th>
+            <th
+              className={`${thBase} border-b border-[#3d444d]/60 bg-sky-500/[0.06] text-right text-sky-300`}
+            >
+              Min
+            </th>
+            <th
+              className={`${thBase} border-b border-[#3d444d]/60 bg-green-500/[0.06] text-right text-green-300`}
+            >
+              Avg
+            </th>
+            <th
+              className={`${thBase} border-b border-[#3d444d]/60 bg-amber-500/[0.05] text-right text-amber-200`}
+            >
+              Max
+            </th>
+            <th
+              className={`${thBase} border-l-2 border-[#2d333b] border-b border-[#3d444d]/60 text-left text-[#b1bac4]`}
+            >
+              Festival
+            </th>
+            <th className={`${thBase} border-b border-[#3d444d]/60 text-left text-[#b1bac4]`}>
+              Tithi
+            </th>
+            <th className={`${thBase} border-b border-[#3d444d]/60 text-left text-[#b1bac4]`}>
+              Nakshatra
+            </th>
+            <th className={`${thBase} border-b border-[#3d444d]/60 text-left text-[#b1bac4]`}>
+              Paksha
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {predictions.map((row, index) => {
+            const stripe = index % 2 === 0 ? 'bg-[#13151a]/55' : 'bg-[#161b22]/25'
+            return (
+              <tr
+                key={row.date}
+                className={`group border-b border-[#2d333b]/35 transition-colors duration-150 hover:bg-[#21262d]/95 ${stripe}`}
+              >
+                <td
+                  className={`${tdBase} whitespace-nowrap border-r border-transparent font-semibold text-[#e6edf3] group-hover:border-[#2d333b]/40`}
+                  title={row.date}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="hidden h-1.5 w-1.5 shrink-0 rounded-full bg-green-400/70 shadow-[0_0_6px_rgba(74,222,128,0.5)] sm:inline-block"
+                      aria-hidden
+                    />
+                    {formatDateLabel(row.date)}
+                  </span>
+                </td>
+                <td
+                  className={`${tdBase} whitespace-nowrap text-right tabular-nums text-sky-200/95 group-hover:text-sky-100`}
+                >
+                  {formatPrice(row.min_price)}
+                </td>
+                <td
+                  className={`${tdBase} whitespace-nowrap text-right tabular-nums text-green-200/95 group-hover:text-green-100`}
+                >
+                  {formatPrice(row.modal_price)}
+                </td>
+                <td
+                  className={`${tdBase} whitespace-nowrap text-right tabular-nums text-amber-200/95 group-hover:text-amber-100`}
+                >
+                  {formatPrice(row.max_price)}
+                </td>
+                <td
+                  className={`${tdBase} max-w-[100px] truncate border-l-2 border-[#2d333b]/90 text-[#b1bac4] sm:max-w-[150px]`}
+                >
+                  {formatCalendarLabel(row.festival)}
+                </td>
+                <td className={`${tdBase} max-w-[90px] truncate text-[#b1bac4] sm:max-w-[130px]`}>
+                  {formatCalendarLabel(row.tithi)}
+                </td>
+                <td className={`${tdBase} max-w-[90px] truncate text-[#b1bac4] sm:max-w-[130px]`}>
+                  {formatCalendarLabel(row.nakshatra)}
+                </td>
+                <td className={`${tdBase} max-w-[80px] truncate text-[#b1bac4] sm:max-w-[110px]`}>
+                  {formatCalendarLabel(row.paksha)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PriceChart({ predictions, crop, latestModal, headerActions }) {
   const series = Array.isArray(predictions) ? predictions : []
   const wrapRef = useRef(null)
+  const tipRef = useRef(null)
   const [hoverIndex, setHoverIndex] = useState(null)
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 })
+  const [tipBox, setTipBox] = useState({ left: 0, top: 0 })
 
   const width = 960
   const height = 380
@@ -141,6 +278,30 @@ function PriceChart({ predictions, crop, latestModal }) {
     setTipPos({ x: e.clientX - r.left, y: e.clientY - r.top })
   }
 
+  useLayoutEffect(() => {
+    const container = wrapRef.current
+    const tip = tipRef.current
+    if (!container || !tip) return
+    if (hoverIndex == null) return
+
+    const containerW = container.clientWidth
+    const containerH = container.clientHeight
+    const tipW = tip.offsetWidth
+    const tipH = tip.offsetHeight
+
+    const inset = 8
+    const anchorDx = 12
+    const anchorDy = 14
+
+    let left = tipPos.x - anchorDx
+    let top = tipPos.y - tipH - anchorDy
+
+    left = Math.max(inset, Math.min(left, Math.max(inset, containerW - tipW - inset)))
+    top = Math.max(inset, Math.min(top, Math.max(inset, containerH - tipH - inset)))
+
+    setTipBox({ left, top })
+  }, [hoverIndex, tipPos.x, tipPos.y])
+
   const lineDrawStyle = (delayMs) => ({
     strokeDasharray: 1,
     strokeDashoffset: 1,
@@ -155,28 +316,16 @@ function PriceChart({ predictions, crop, latestModal }) {
     return { y, value }
   })
 
-  const title = (crop || 'MAIZE').toUpperCase()
-  const subtitle = `${series.length} points · daily`
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#2d333b] bg-[#161b22] shadow-[0_14px_40px_rgba(0,0,0,0.35)]">
-      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[#2d333b]/85 px-4 py-2.5 max-[900px]:flex-col max-[900px]:items-start sm:px-5 sm:py-3">
-        <div className="text-left">
-          <h2 className="mb-0.5 text-lg font-bold tracking-tight text-green-400 sm:text-[22px]">{title}</h2>
-          <p className="text-xs text-[#8b949e] sm:text-[13px]">{subtitle}</p>
-        </div>
-        {typeof latestModal === 'number' && (
-          <div className="shrink-0 text-right max-[900px]:text-left">
-            <span className="block text-lg font-semibold tabular-nums tracking-tight text-[#c9d1d9] sm:text-[22px]">
-              {latestModal.toFixed(2)}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-[#8b949e] sm:text-[11px]">
-              modal · last forecast day
-            </span>
-          </div>
-        )}
-      </header>
+      <ChartPanelHeader
+        crop={crop}
+        pointsCount={series.length}
+        latestModal={latestModal}
+        headerActions={headerActions}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col bg-[#13151a] px-3 pb-2 pt-2 sm:px-[18px] sm:pb-3 sm:pt-3">
         <div ref={wrapRef} className="relative min-h-0 w-full flex-1">
@@ -322,11 +471,11 @@ function PriceChart({ predictions, crop, latestModal }) {
 
           {hoverPoint != null && (
             <div
-              className="pointer-events-none absolute z-20 min-w-[180px] rounded-lg border border-[#2d333b] bg-[#1c2128]/98 px-3 py-2.5 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm"
+              ref={tipRef}
+              className="pointer-events-none absolute z-20 max-w-[min(320px,calc(100vw-24px))] min-w-[200px] rounded-lg border border-[#2d333b] bg-[#1c2128]/98 px-3 py-2.5 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm"
               style={{
-                left: tipPos.x,
-                top: tipPos.y,
-                transform: 'translate(-12px, calc(-100% - 14px))',
+                left: tipBox.left,
+                top: tipBox.top,
               }}
               role="status"
             >
@@ -356,6 +505,21 @@ function PriceChart({ predictions, crop, latestModal }) {
                   <span className="font-medium text-[#e6edf3]">{formatPrice(hoverPoint.max_price)}</span>
                 </li>
               </ul>
+              <div className="mt-2 border-t border-[#2d333b] pt-2">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#8b949e]">
+                  Festival & panchang
+                </p>
+                <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1 text-[12px] leading-snug">
+                  <dt className="text-[#8b949e]">Festival</dt>
+                  <dd className="text-[#e6edf3]">{formatCalendarLabel(hoverPoint.festival)}</dd>
+                  <dt className="text-[#8b949e]">Tithi</dt>
+                  <dd className="text-[#e6edf3]">{formatCalendarLabel(hoverPoint.tithi)}</dd>
+                  <dt className="text-[#8b949e]">Nakshatra</dt>
+                  <dd className="text-[#e6edf3]">{formatCalendarLabel(hoverPoint.nakshatra)}</dd>
+                  <dt className="text-[#8b949e]">Paksha</dt>
+                  <dd className="text-[#e6edf3]">{formatCalendarLabel(hoverPoint.paksha)}</dd>
+                </dl>
+              </div>
             </div>
           )}
         </div>
@@ -383,6 +547,7 @@ function App() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showFestivals, setShowFestivals] = useState(false)
 
   const stats = useMemo(() => {
     const preds = Array.isArray(data?.predictions) ? data.predictions : []
@@ -420,6 +585,7 @@ function App() {
       const result = await response.json()
       console.log(result)
       setData(result)
+      setShowFestivals(false)
     } catch (fetchError) {
       setError(
         fetchError.message.includes('Failed to fetch')
@@ -512,7 +678,7 @@ function App() {
 
   const statsCards =
     stats != null ? (
-      <div className="grid min-h-0 shrink grid-cols-3 gap-1.5 max-[900px]:grid-cols-1 sm:gap-2">
+      <div className="grid shrink-0 grid-cols-3 gap-1.5 max-[1200px]:grid-cols-1 sm:gap-2">
         <article
           className="rounded-xl border border-[#2d333b] bg-[#161b22] px-2 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.2)] sm:px-3 sm:py-2"
           title="How many daily price points the API returned in this forecast."
@@ -547,6 +713,17 @@ function App() {
       </div>
     ) : null
 
+  const festivalsHeaderButton =
+    data != null ? (
+      <button
+        type="button"
+        onClick={() => setShowFestivals((v) => !v)}
+        className="rounded-lg border border-[#2d333b] bg-[#1c2128] px-3 py-1.5 text-xs font-semibold text-[#e6edf3] transition hover:border-green-400/60 hover:bg-[#161b22]"
+      >
+        {showFestivals ? 'Back to chart' : 'Festivals'}
+      </button>
+    ) : null
+
   return (
     <main className="flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden px-3 py-2 text-left sm:px-5 sm:py-2">
       {!data ? (
@@ -559,21 +736,68 @@ function App() {
         </>
       ) : (
         <>
-          {/* 25% viewport: title, form, metrics */}
-          <section className="flex min-h-0 shrink-0 grow-0 basis-1/4 flex-col justify-start gap-1.5 overflow-hidden sm:gap-2">
-            {headerBlock}
-            {formBlock}
-            {errorBlock}
-            {statsCards}
+          {/* 25% viewport: title, form, metrics — stats + calendar scroll here if tight */}
+          <section className="flex min-h-0 shrink-0 grow-0 basis-1/4 flex-col gap-1.5 overflow-hidden sm:gap-2">
+            <div className="flex shrink-0 flex-col gap-1.5">
+              {headerBlock}
+              {formBlock}
+              {errorBlock}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+              {statsCards}
+            </div>
           </section>
 
-          {/* ~75% viewport: chart */}
+          {/* ~75% viewport: chart or festivals table */}
           <section className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden pt-1.5 sm:pt-2">
-            <PriceChart
-              predictions={data.predictions}
-              crop={data.crop}
-              latestModal={stats?.latestModal}
-            />
+            {showFestivals ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#2d333b] bg-[#161b22] shadow-[0_14px_40px_rgba(0,0,0,0.35)]">
+                <ChartPanelHeader
+                  crop={data.crop}
+                  pointsCount={data.predictions.length}
+                  latestModal={stats?.latestModal}
+                  headerActions={festivalsHeaderButton}
+                />
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#13151a] px-3 pb-2 pt-2 sm:px-[18px] sm:pb-3 sm:pt-3">
+                  <div className="mb-3 shrink-0 overflow-hidden rounded-xl border border-[#2d333b]/90 bg-gradient-to-br from-[#1a1f27] via-[#171b22] to-[#13161c] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:px-4 sm:py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+                      <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                        <div
+                          className="mt-0.5 h-9 w-1 shrink-0 rounded-full bg-gradient-to-b from-green-400 via-emerald-400/90 to-sky-500/70 shadow-[0_0_12px_rgba(74,222,128,0.35)]"
+                          aria-hidden
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold leading-snug tracking-tight text-[#e6edf3] sm:text-sm">
+                            All forecast days
+                          </p>
+                          <p className="mt-0.5 text-[10px] leading-snug text-[#6e7681] sm:text-[11px]">
+                            One row per day — min, average, max, and calendar fields.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="inline-flex shrink-0 items-baseline gap-1.5 rounded-lg border border-green-400/20 bg-green-400/[0.08] px-2.5 py-1 ring-1 ring-black/25 sm:px-3 sm:py-1.5">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-[#8b949e] sm:text-[10px]">
+                          Days
+                        </span>
+                        <span className="text-base font-bold tabular-nums tracking-tight text-green-400 sm:text-lg">
+                          {data.predictions.length}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-auto">
+                    <ForecastDaysTable predictions={data.predictions} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <PriceChart
+                predictions={data.predictions}
+                crop={data.crop}
+                latestModal={stats?.latestModal}
+                headerActions={festivalsHeaderButton}
+              />
+            )}
           </section>
         </>
       )}
